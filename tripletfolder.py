@@ -7,44 +7,44 @@ import torch
 class TripletFolder(datasets.ImageFolder):
 
     def __init__(self, root, transform):
-        super(TripletFolder, self).__init__(root, transform)
-        targets = np.asarray([s[1] for s in self.samples])
-        self.targets = targets
-        cams = []
-        for s in self.samples:
-            cams.append( self._get_cam_id(s[0]) )
-        self.cams = np.asarray(cams)
+        super(TripletFolder, self).__init__(root + '/satellite', transform)
 
-    def _get_cam_id(self, path):
-        camera_id = []
-        filename = os.path.basename(path)
-        camera_id = filename.split('c')[1][0]
-        #camera_id = filename.split('_')[2][0:2]
-        return int(camera_id)-1
+        # record the drone information
+        drone_path = []
+        drone_id = []
+        drone_root = root + '/drone/'
+        for folder_name in os.listdir(drone_root):
+            folder_root = drone_root + folder_name
+            if not os.path.isdir(folder_root):
+                continue
+            for file_name in os.listdir(folder_root):
+                drone_path.append(folder_root + '/' + file_name)
+                drone_id.append(int(folder_name))
+
+        self.drone_path = drone_path
+        self.drone_id = np.asarray(drone_id)
 
     def _get_pos_sample(self, target, index):
-        pos_index = np.argwhere(self.targets == target)
-        pos_index = pos_index.flatten()
-        pos_index = np.setdiff1d(pos_index, index)
+        pos_index = np.argwhere(self.drone_id == target)
         rand = np.random.permutation(len(pos_index))
         result_path = []
         for i in range(4):
            t = i%len(rand)
-           tmp_index = pos_index[rand[t]]
-           result_path.append(self.samples[tmp_index][0])
+           tmp_index = pos_index[rand[t]][0]
+           result_path.append(self.drone_path[tmp_index])
         return result_path
 
     def _get_neg_sample(self, target):
-        neg_index = np.argwhere(self.targets != target)
+        neg_index = np.argwhere(self.drone_id != target)
         neg_index = neg_index.flatten()
         rand = random.randint(0,len(neg_index)-1)
-        return self.samples[neg_index[rand]]
+        return self.drone_path[neg_index[rand]]
 
     def __getitem__(self, index):
         path, target = self.samples[index]
-        cam = self.cams[index]
+        original_target = int(os.path.basename(os.path.dirname(path)))
         # pos_path, neg_path
-        pos_path = self._get_pos_sample(target, index)
+        pos_path = self._get_pos_sample(original_target, index)
 
         sample = self.loader(path)
         pos0 = self.loader(pos_path[0])

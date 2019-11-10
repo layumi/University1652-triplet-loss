@@ -27,13 +27,19 @@ from shutil import copyfile
 
 version =  torch.__version__
 
+#fp16
+try:
+    from apex.fp16_utils import *
+    from apex import amp, optimizers
+except ImportError: # will be 3.x series
+    print('This is not an error. If you want to use low precision, i.e., fp16, please install the apex with cuda support (https://github.com/NVIDIA/apex) and update pytorch to 1.0')
 ######################################################################
 # Options
 # --------
 parser = argparse.ArgumentParser(description='Training')
 parser.add_argument('--gpu_ids',default='0', type=str,help='gpu_ids: e.g. 0  0,1,2  0,2')
 parser.add_argument('--name',default='ft_ResNet50', type=str, help='output model name')
-parser.add_argument('--data_dir',default='../Market/pytorch',type=str, help='training dir path')
+parser.add_argument('--data_dir',default='./data',type=str, help='training dir path')
 parser.add_argument('--train_all', action='store_true', help='use all training data' )
 parser.add_argument('--color_jitter', action='store_true', help='use color jitter in training' )
 parser.add_argument('--batchsize', default=32, type=int, help='batchsize')
@@ -44,9 +50,11 @@ parser.add_argument('--alpha', default=0.0, type=float, help='regularization, pu
 parser.add_argument('--erasing_p', default=0, type=float, help='Random Erasing probability, in [0,1]')
 parser.add_argument('--use_dense', action='store_true', help='use densenet121' )
 parser.add_argument('--PCB', action='store_true', help='use PCB+ResNet50' )
+parser.add_argument('--fp16', action='store_true', help='use float16 instead of float32, which will save about 50% memory' )
 opt = parser.parse_args()
 
 data_dir = opt.data_dir
+fp16 = opt.fp16
 name = opt.name
 str_ids = opt.gpu_ids.split(',')
 gpu_ids = []
@@ -68,7 +76,7 @@ if len(gpu_ids)>0:
 
 transform_train_list = [
         #transforms.RandomResizedCrop(size=128, scale=(0.75,1.0), ratio=(0.75,1.3333), interpolation=3), #Image.BICUBIC)
-        transforms.Resize((256,128), interpolation=3),
+        transforms.Resize((256,256), interpolation=3),
         #transforms.RandomCrop((256,128)),
         transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
@@ -76,23 +84,11 @@ transform_train_list = [
         ]
 
 transform_val_list = [
-        transforms.Resize(size=(256,128),interpolation=3), #Image.BICUBIC
+        transforms.Resize(size=(256,256),interpolation=3), #Image.BICUBIC
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ]
 
-if opt.PCB:
-    transform_train_list = [
-        transforms.Resize((384,192), interpolation=3),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        ]
-    transform_val_list = [
-        transforms.Resize(size=(384,192),interpolation=3), #Image.BICUBIC
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        ]
 
 if opt.erasing_p>0:
     transform_train_list = transform_train_list +  [RandomErasing(probability = opt.erasing_p, mean=[0.0, 0.0, 0.0])]
@@ -112,10 +108,8 @@ if opt.train_all:
      train_all = '_all'
 
 image_datasets = {}
-image_datasets['train'] = TripletFolder(os.path.join(data_dir, 'train_all'),
+image_datasets['train'] = TripletFolder(os.path.join(data_dir, 'train'),
                                           data_transforms['train'])
-image_datasets['val'] = TripletFolder(os.path.join(data_dir, 'val'),
-                                          data_transforms['val'])
 
 batch = {}
 
@@ -123,9 +117,9 @@ class_names = image_datasets['train'].classes
 class_vector = [s[1] for s in image_datasets['train'].samples]
 dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=opt.batchsize, 
                                              shuffle=True, num_workers=8)
-              for x in ['train', 'val']}
+              for x in ['train']}
 
-dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val']}
+dataset_sizes = {x: len(image_datasets[x]) for x in ['train']}
 
 use_gpu = torch.cuda.is_available()
 
@@ -271,10 +265,15 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
 
                 # backward + optimize only if in training phase
                 if phase == 'train':
-                    loss_triplet.backward()
+                    if fp16: # we use optimier to backward loss
+                        with amp.scale_loss(loss_triplet, optimizer) as scaled_loss:
+                            scaled_loss.backward()
+                    else:
+                        loss_triplet.backward()
+
                     optimizer.step()
                 # statistics
-                if int(version[2]) > 3: # for the new version like 0.4.0 and 0.5.0
+                if int(version[0])>0 or int(version[2]) > 3: # for the new version like 0.4.0 and 0.5.0
                     running_loss += loss_triplet.item() #* opt.batchsize
                 else :  # for the old version like 0.3.0 and 0.3.1
                     running_loss += loss_triplet.data[0] #*opt.batchsize
@@ -304,7 +303,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
 
             if epoch%10 == 9:
                 save_network(model, epoch)
-            draw_curve(epoch)
+            #draw_curve(epoch)
 
         print()
 
@@ -363,7 +362,7 @@ else:
 if opt.PCB:
     model = PCB(len(class_names))
 
-print(model)
+#print(model)
 
 if use_gpu:
     model = model.cuda()
@@ -414,13 +413,16 @@ exp_lr_scheduler = lr_scheduler.MultiStepLR(optimizer_ft, milestones=[40,60], ga
 dir_name = os.path.join('./model',name)
 if not os.path.isdir(dir_name):
     os.mkdir(dir_name)
-    copyfile('./train_new.py', dir_name+'/train_new.py')
+    copyfile('./train.py', dir_name+'/train.py')
     copyfile('./model.py', dir_name+'/model.py')
     copyfile('./tripletfolder.py', dir_name+'/tripletfolder.py')
 
 # save opts
 with open('%s/opts.json'%dir_name,'w') as fp:
     json.dump(vars(opt), fp, indent=1)
+
+if fp16:
+    model, optimizer_ft = amp.initialize(model, optimizer_ft, opt_level = "O1")
 
 model = train_model(model, criterion, optimizer_ft, exp_lr_scheduler,
                        num_epochs=70)
