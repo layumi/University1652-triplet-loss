@@ -61,6 +61,7 @@ class ft_net(nn.Module):
         model_ft = models.resnet50(pretrained=True)
         # avg pooling to global pooling
         model_ft.avgpool = nn.AdaptiveAvgPool2d((1,1))
+        model_ft.fc == nn.Sequential() # save memory
         self.model = model_ft
         self.classifier = ClassBlock(2048, class_num, dropout=False, relu=False)
         # remove the final downsample

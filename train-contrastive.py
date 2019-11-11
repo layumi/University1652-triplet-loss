@@ -43,7 +43,7 @@ parser.add_argument('--data_dir',default='./data',type=str, help='training dir p
 parser.add_argument('--train_all', action='store_true', help='use all training data' )
 parser.add_argument('--color_jitter', action='store_true', help='use color jitter in training' )
 parser.add_argument('--batchsize', default=32, type=int, help='batchsize')
-parser.add_argument('--poolsize', default=128, type=int, help='poolsize')
+parser.add_argument('--poolsize', default=96, type=int, help='poolsize')
 parser.add_argument('--margin', default=0.3, type=float, help='margin')
 parser.add_argument('--lr', default=0.01, type=float, help='margin')
 parser.add_argument('--alpha', default=0.0, type=float, help='regularization, push to -1')
@@ -247,8 +247,9 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
                     #loss = criterion(outputs, labels)
                     #loss_triplet = criterion_triplet(f, pf, nf)
                     reg = torch.sum((1+nscore)**2) + torch.sum((-1+pscore)**2)
-                    loss = torch.sum(torch.nn.functional.relu(nscore + opt.margin - pscore))  #Here I use sum
-                    loss_triplet = loss + opt.alpha*reg
+                    #loss = torch.sum(torch.nn.functional.relu(nscore + opt.margin - pscore))  #Here I use sum
+                    loss = torch.sum( (1 + nscore) **2) + torch.sum((1 - pscore)**2)  #Here I use sum
+                    loss_triplet = loss
                 else:
                     part = {}
                     sm = nn.Softmax(dim=1)
@@ -281,7 +282,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
                 running_corrects += float(torch.sum(pscore>nscore+opt.margin))
                 running_margin +=float(torch.sum(pscore-nscore))
                 running_reg += reg
-                del loss_triplet, inputs, outputs, labels
+                del loss_triplet, reg, pscore, nscore, outputs, inputs, labels
 
             datasize = dataset_sizes['train']//opt.batchsize * opt.batchsize
             epoch_loss = running_loss / datasize
