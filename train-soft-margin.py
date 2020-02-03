@@ -247,7 +247,8 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
                     #loss = criterion(outputs, labels)
                     #loss_triplet = criterion_triplet(f, pf, nf)
                     reg = 0 #torch.sum((1+nscore)**2) + torch.sum((-1+pscore)**2)
-                    loss = torch.sum(torch.nn.functional.relu(nscore + opt.margin - pscore))  #Here I use sum
+                    #loss = torch.sum(torch.nn.functional.relu(nscore + opt.margin - pscore))  #Here I use sum
+                    loss = torch.log(1 + torch.exp(nscore - pscore))  #Here I use sum
                     loss_triplet = loss #+ opt.alpha*reg
                 else:
                     part = {}
