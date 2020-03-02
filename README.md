@@ -1,9 +1,6 @@
-## Person_reID_triplet-loss-baseline
+## University-1632_triplet-loss
 
-Baseline Code (with bottleneck) for Person-reID (pytorch).
-
-We arrived **Rank@1=86.45%, mAP=70.66%** with ResNet stride=2.
-SGD optimizer is used.
+Baseline Code (with bottleneck) for University-1632 (pytorch).
 
 Any suggestion is welcomed.
 
@@ -102,8 +99,3 @@ You may also try `evaluate_gpu.py` to conduct a faster evaluation with GPU.
 For mAP calculation, you also can refer to the [C++ code for Oxford Building](http://www.robots.ox.ac.uk/~vgg/data/oxbuildings/compute_ap.cpp). We use the triangle mAP calculation (consistent with the Market1501 original code).
 
 
-## Related Repos
-1. [Pedestrian Alignment Network](https://github.com/layumi/Pedestrian_Alignment)
-2. [2stream Person re-ID](https://github.com/layumi/2016_person_re-ID)
-3. [Pedestrian GAN](https://github.com/layumi/Person-reID_GAN)
-4. [Language Person Search](https://github.com/layumi/Image-Text-Embedding)
