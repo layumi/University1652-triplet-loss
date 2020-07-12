@@ -1,6 +1,6 @@
-## University-1632_triplet-loss
+## University-1652_triplet-loss
 
-Baseline Code (with bottleneck) for University-1632 (pytorch).
+Baseline Code (with bottleneck) for University-1652 (pytorch).
 
 Any suggestion is welcomed.
 
